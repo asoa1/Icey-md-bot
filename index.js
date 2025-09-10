@@ -1,5 +1,6 @@
 import { exec, spawn } from "child_process";
 
+// Reference to the bot child process
 let botProcess;
 
 // 📦 Install dependencies
@@ -18,22 +19,20 @@ function installDependencies() {
   });
 }
 
-// 🚀 Start bot (start.js)
+// 🚀 Start the bot
 function startBot() {
   console.log("🚀 Starting bot...");
   botProcess = spawn("node", ["start.js"], { stdio: "inherit" });
 
+  // Restart automatically if the bot exits
   botProcess.on("close", (code) => {
     console.log(`⚠️ Bot process exited with code ${code}`);
-    // Restart if it crashes
-    if (code !== 0) {
-      console.log("♻️ Restarting bot after crash...");
-      startBot();
-    }
+    console.log("♻️ Restarting bot...");
+    startBot();
   });
 }
 
-// 🔄 Update bot (pull from GitHub + install + restart)
+// 🔄 Update bot from GitHub and restart
 function updateBot() {
   console.log("🔄 Updating bot from GitHub...");
   exec("git pull origin main", (error, stdout, stderr) => {
@@ -52,15 +51,14 @@ function updateBot() {
       console.log("✅ Update complete. Restarting bot...");
 
       if (botProcess) {
-        botProcess.kill("SIGTERM"); // stop old bot
+        botProcess.kill("SIGTERM"); // Stop old bot
       }
-      startBot(); // restart bot
+      startBot(); // Restart bot
     });
   });
 }
 
-// 🔐 Allow .update from stdin (for testing)
-// You can also hook this into your WhatsApp commands
+// 🔐 Listen to terminal input for `.update`
 process.stdin.on("data", (data) => {
   const input = data.toString().trim();
   if (input === ".update") {
@@ -68,7 +66,14 @@ process.stdin.on("data", (data) => {
   }
 });
 
-// ▶️ First run
+// ▶️ First run: install dependencies then start the bot
 installDependencies()
   .then(startBot)
   .catch(() => console.log("⚠️ Skipping start due to install error"));
+
+// ✅ Handle Ctrl+C gracefully
+process.on("SIGINT", () => {
+  console.log("\n🛑 Stopping bot...");
+  if (botProcess) botProcess.kill("SIGTERM");
+  process.exit(0);
+});

@@ -276,6 +276,53 @@ Only the owner can use commands.
   });
 }
 
+import simpleGit from "simple-git";
+
+let lastCommit = null;
+const git = simpleGit();
+
+async function checkForUpdates(sock, ownerId) {
+  try {
+    await git.fetch("origin", "main");
+
+    const localHash = await git.revparse(["HEAD"]);
+    const remoteHash = await git.revparse(["origin/main"]);
+
+    if (!lastCommit) lastCommit = localHash;
+
+    if (localHash !== remoteHash) {
+      await sock.sendMessage(ownerId, {
+        text: `🔔 *Update Available!*\n\n📌 Local: ${localHash.slice(0, 7)}\n📌 Remote: ${remoteHash.slice(0, 7)}\n\n💡 Run *.update* to apply changes.`,
+      });
+      console.log("🔔 Update available — notified owner");
+    } else {
+      console.log("✅ Bot is up-to-date");
+    }
+  } catch (err) {
+    console.error("⚠️ Failed to check for updates:", err);
+  }
+}
+
+// 🧪 TEST MODE: check every 10 sec for now
+setInterval(() => {
+  if (sock?.user?.id) {
+    checkForUpdates(sock, sock.user.id);
+  }
+}, 60 * 1000);  // 10 seconds
+
+// After ~5 minutes, switch to 30 min interval
+setTimeout(() => {
+  clearInterval(this); // stop the 10s interval
+  setInterval(() => {
+    if (sock?.user?.id) {
+      checkForUpdates(sock, sock.user.id);
+    }
+  }, 30 * 60 * 1000); // 30 minutes
+  console.log("⏳ Switched to 30-minute update checks");
+}, 5 * 60 * 1000); // 5 minutes
+
+
+
 // Create commands folder if it doesn't exist
 const commandsDir = path.join(__dirname, 'commands');
 if (!fs.existsSync(commandsDir)) {

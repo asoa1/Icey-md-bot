@@ -36,6 +36,8 @@ import {
     settingsCommand
 } from './commands/welcome.js';
 
+import { startAutoUpdateChecker } from "./commands/update.js";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const ask = (q) => new Promise((res) => rl.question(q, res));
@@ -131,6 +133,8 @@ async function startBot() {
 
   welcomeMonitor(sock);
 
+startAutoUpdateChecker(sock);
+    
   // Load commands function
   async function loadCommands() {
     console.log(chalk.blue('📂 Loading commands...'));

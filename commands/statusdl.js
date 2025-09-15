@@ -1,6 +1,6 @@
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 
-export const command = 'statusdl';
+export const command = "statusdl";
 
 export async function execute(sock, m) {
   try {
@@ -8,11 +8,11 @@ export async function execute(sock, m) {
     const quoted = m.message?.extendedTextMessage?.contextInfo?.quotedMessage;
 
     if (!quoted) {
-      await sock.sendMessage(jid, { text: `❌ Reply to a *status image/video* with .statusdl` });
+      await sock.sendMessage(jid, { text: `❌ Reply to a *status image/video/audio* with .statusdl` });
       return;
     }
 
-    // Download status media (image/video)
+    // Download status media (image/video/audio)
     const buffer = await downloadMediaMessage(
       { message: quoted },
       "buffer",
@@ -20,13 +20,15 @@ export async function execute(sock, m) {
       { logger: sock.logger }
     );
 
-    // Send back as image or video
+    // Send back depending on type
     if (quoted.imageMessage) {
       await sock.sendMessage(jid, { image: buffer, caption: "✅ Status Downloaded" }, { quoted: m });
     } else if (quoted.videoMessage) {
       await sock.sendMessage(jid, { video: buffer, caption: "✅ Status Downloaded" }, { quoted: m });
+    } else if (quoted.audioMessage) {
+      await sock.sendMessage(jid, { audio: buffer, mimetype: "audio/mp4" }, { quoted: m });
     } else {
-      await sock.sendMessage(jid, { text: `❌ That’s not a status image/video.` });
+      await sock.sendMessage(jid, { text: `❌ That’s not a supported status type (image/video/audio only).` });
     }
 
   } catch (err) {

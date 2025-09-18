@@ -36,6 +36,8 @@ import {
     settingsCommand
 } from './commands/welcome.js';
 
+import { startAutoUpdateChecker } from "./commands/update.js";
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const ask = (q) => new Promise((res) => rl.question(q, res));
@@ -66,6 +68,11 @@ async function startBot() {
     
     if (connection === 'open') {
       console.log(chalk.green('✅ Connected to WhatsApp server!'));
+
+                   //update autochecker 
+           startAutoUpdateChecker(sock);
+  }
+});
 
       // Store bot owner automatically (the bot itself)
       globalThis.botOwner = sock.user.id;

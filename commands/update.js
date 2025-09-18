@@ -6,6 +6,7 @@ export const command = "update";
 
 const git = simpleGit();
 let lastRemoteHash = null;
+let lastNotifiedAt = 0; // timestamp of last notification
 
 /**
  * .update command – manually pull and restart
@@ -35,7 +36,9 @@ export async function execute(sock, m) {
 }
 
 /**
- * Auto-checker – runs every 10 seconds and notifies owner if update is available
+ * Auto-checker – runs every 1 minute
+ * - Sends immediate notification when update is found
+ * - After that, only reminds every 30 minutes
  */
 export function startAutoUpdateChecker(sock) {
   setInterval(async () => {
@@ -48,13 +51,20 @@ export function startAutoUpdateChecker(sock) {
       if (!lastRemoteHash) lastRemoteHash = remoteHash;
 
       if (localHash !== remoteHash) {
-        await sock.sendMessage(sock.user.id, {
-          text: `🔔 *Update Available!*\n\n📌 Local: ${localHash.slice(0, 7)}\n📌 Remote: ${remoteHash.slice(0, 7)}\n\n💡 Run *.update* to pull and restart.`,
-        });
-        console.log("🔔 Update available — notified owner");
+        const now = Date.now();
+
+        if (now - lastNotifiedAt > 30 * 60 * 1000) {
+          // Notify owner
+          await sock.sendMessage(sock.user.id, {
+            text: `🔔 *Update Available!*\n\n📌 Local: ${localHash.slice(0, 7)}\n📌 Remote: ${remoteHash.slice(0, 7)}\n\n💡 Run *.update* to pull and restart.`,
+          });
+
+          console.log("🔔 Update available — notified owner");
+          lastNotifiedAt = now;
+        }
       }
     } catch (err) {
       console.error("⚠️ Update check failed:", err.message);
     }
-  }, 60 * 60 * 1000); // every 10 seconds
+  }, 60 * 1000); // every 1 minute
 }

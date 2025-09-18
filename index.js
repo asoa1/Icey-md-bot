@@ -62,26 +62,24 @@ async function startBot() {
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect } = update;
-    
-    console.log(chalk.yellow('Connection update:'), connection);
-    
-    if (connection === 'open') {
-      console.log(chalk.green('✅ Connected to WhatsApp server!'));
+  const { connection, lastDisconnect } = update;
+  
+  console.log(chalk.yellow('Connection update:'), connection);
+  
+  if (connection === 'open') {
+    console.log(chalk.green('✅ Connected to WhatsApp server!'));
 
-                   //update autochecker 
-           startAutoUpdateChecker(sock);
-  }
-});
+    // update autochecker
+    startAutoUpdateChecker(sock);
 
-      // Store bot owner automatically (the bot itself)
-      globalThis.botOwner = sock.user.id;
-      console.log(chalk.blue('👑 Bot owner set to:'), globalThis.botOwner);
-      
-      // Now load commands after successful connection
-      await loadCommands();
-      
-      const welcomeCaption = `
+    // Store bot owner automatically (the bot itself)
+    globalThis.botOwner = sock.user.id;
+    console.log(chalk.blue('👑 Bot owner set to:'), globalThis.botOwner);
+
+    // Now load commands after successful connection
+    await loadCommands();
+
+    const welcomeCaption = `
 ✨ *CONNECTION SUCCESSFUL* ✨
 
 👋 Hello! Your WhatsApp bot is now connected and ready.
@@ -94,47 +92,47 @@ async function startBot() {
 💫 Powered by *Baileys* library.
 `;
 
-      // Load scheduled messages
-      const commands = new Map();
-      loadScheduledMessages(sock);
+    // Load scheduled messages
+    loadScheduledMessages(sock);
 
-      try {
-        await sock.sendMessage(sock.user.id, {
-          image: { url: "./media/icey.jpg" }, // replace with your own banner/logo path
-          caption: welcomeCaption
-        });
-        console.log(chalk.green('✅ Welcome message with image sent!'));
-      } catch (e) {
-        console.error('Failed to send welcome message:', e);
-      }
+    try {
+      await sock.sendMessage(sock.user.id, {
+        image: { url: "./media/icey.jpg" }, // replace with your own banner/logo path
+        caption: welcomeCaption
+      });
+      console.log(chalk.green('✅ Welcome message with image sent!'));
+    } catch (e) {
+      console.error('Failed to send welcome message:', e);
     }
+  }
 
-    if (connection === 'close') {
-      const reason = lastDisconnect?.error?.output?.statusCode;
-      console.log(chalk.yellow('Disconnect reason:'), reason);
-      
-      if (reason !== DisconnectReason.loggedOut) {
-        console.log(chalk.yellow('⚠️ Reconnecting...'));
-        setTimeout(() => startBot(), 2000);
-      } else {
-        console.log(chalk.red('❌ Logged out.'));
-      }
-    }
+  if (connection === 'close') {
+    const reason = lastDisconnect?.error?.output?.statusCode;
+    console.log(chalk.yellow('Disconnect reason:'), reason);
     
-    // Request pairing code if not registered
-    if (connection === 'connecting' && !sock.authState.creds.registered) {
-      console.log(chalk.blue('🔐 Authentication required...'));
-      setTimeout(async () => {
-        try {
-          const number = await ask('📱 Enter your number with country code (e.g., 1234567890): ');
-          const code = await sock.requestPairingCode(number.trim());
-          console.log(chalk.magenta('🔑 Pairing Code:'), chalk.bold(code));
-        } catch (error) {
-          console.error('Error requesting pairing code:', error);
-        }
-      }, 1000);
+    if (reason !== DisconnectReason.loggedOut) {
+      console.log(chalk.yellow('⚠️ Reconnecting...'));
+      setTimeout(() => startBot(), 2000);
+    } else {
+      console.log(chalk.red('❌ Logged out.'));
     }
-  });
+  }
+  
+  // Request pairing code if not registered
+  if (connection === 'connecting' && !sock.authState.creds.registered) {
+    console.log(chalk.blue('🔐 Authentication required...'));
+    setTimeout(async () => {
+      try {
+        const number = await ask('📱 Enter your number with country code (e.g., 1234567890): ');
+        const code = await sock.requestPairingCode(number.trim());
+        console.log(chalk.magenta('🔑 Pairing Code:'), chalk.bold(code));
+      } catch (error) {
+        console.error('Error requesting pairing code:', error);
+      }
+    }, 1000);
+  }
+});
+
 
   welcomeMonitor(sock);
 

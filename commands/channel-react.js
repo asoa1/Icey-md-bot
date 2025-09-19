@@ -22,21 +22,26 @@ export async function execute(sock, m) {
     const jid = m.key.remoteJid;
     const sender = m.sender || m.key.participant || m.key.remoteJid;
     
+    // Debug: Log the sender and ownerId
+    console.log('Sender:', sender);
+    console.log('Owner ID:', ownerId);
+    
     // Set owner if not set (same pattern as vv command)
     if (!ownerId) {
-        ownerId = sock.user.id;
+        ownerId = sock.user?.id;
         console.log(`👑 Chr Command - Owner set to: ${ownerId}`);
     }
     
+    // Check if user is bot owner (same pattern as vv command)
+    if (sender !== ownerId) {
+        console.log('Permission denied: Sender is not owner');
+        await sock.sendMessage(jid, {
+            text: '❌ Owner only command'
+        });
+        return;
+    }
+    
     try {
-        // Check if user is bot owner (same pattern as vv command)
-        if (sender !== ownerId) {
-            await sock.sendMessage(jid, {
-                text: '❌ Owner only command'
-            });
-            return;
-        }
-        
         // Get message text
         let text = '';
         if (m.message.conversation) {
@@ -82,43 +87,10 @@ export async function execute(sock, m) {
             .map(ch => (ch === ' ' ? '―' : charMap[ch] || ch))
             .join('');
         
-        // Extract channel ID from the link
-        const parts = channelLink.split('/');
-        const channelId = parts.find(part => part.length === 20 && !part.includes('.')) || parts[4];
-        
-        if (!channelId) {
-            await sock.sendMessage(jid, {
-                text: '❌ Invalid link - could not extract channel ID'
-            });
-            return;
-        }
-        
-        // Try to use the newsletter API if available
-        try {
-            // Check if the newsletter functions exist
-            if (typeof sock.newsletterMetadata === 'function' && 
-                typeof sock.newsletterReactMessage === 'function') {
-                
-                const channelMeta = await sock.newsletterMetadata("invite", channelId);
-                
-                // For a real implementation, you would need the message ID too
-                // This is a simplified version that just shows the capability
-                await sock.sendMessage(jid, {
-                    text: `✅ *CHANNEL REACTION READY*\n\nChannel: ${channelMeta.name || 'Unknown'}\nReaction: ${styledText}\n\nNote: This is a preview. Full implementation requires message ID.`
-                });
-            } else {
-                // Fallback if newsletter API is not available
-                await sock.sendMessage(jid, {
-                    text: `🎨 *STYLIZED TEXT GENERATED*\n\nInput: ${inputText}\nOutput: ${styledText}\n\nNote: Newsletter API not available in this Baileys version.`
-                });
-            }
-            
-        } catch (error) {
-            console.error('Channel API error:', error);
-            await sock.sendMessage(jid, {
-                text: `✅ *TEXT CONVERSION COMPLETE*\n\nOriginal: ${inputText}\nStyled: ${styledText}\n\nError with channel API: ${error.message || 'Not supported'}`
-            });
-        }
+        // For now, just show the result since newsletter API might not be available
+        await sock.sendMessage(jid, {
+            text: `🎨 *STYLIZED TEXT GENERATED*\n\nInput: ${inputText}\nOutput: ${styledText}\n\nNote: This is a text conversion demo. Channel reaction API might not be available.`
+        });
         
     } catch (err) {
         console.error('Error in chr command:', err);
@@ -130,6 +102,6 @@ export async function execute(sock, m) {
 
 // Monitor to set owner when bot starts (same pattern as vv command)
 export const monitor = (sock) => {
-    ownerId = sock.user.id;
+    ownerId = sock.user?.id;
     console.log(`👑 Chr Command - Owner set to: ${ownerId}`);
 };

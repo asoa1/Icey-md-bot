@@ -14,25 +14,23 @@ const charMap = {
   5: "➎", 6: "➏", 7: "➐", 8: "➑", 9: "➒"
 };
 
+let ownerId = null;
+
 export const command = 'chr';
 
 export async function execute(sock, m) {
     const jid = m.key.remoteJid;
     const sender = m.sender || m.key.participant || m.key.remoteJid;
     
+    // Set owner if not set (same pattern as vv command)
+    if (!ownerId) {
+        ownerId = sock.user.id;
+        console.log(`👑 Chr Command - Owner set to: ${ownerId}`);
+    }
+    
     try {
-        // Get bot owner ID using the same method as your index.js
-        const botOwnerId = globalThis.botOwner || sock.user?.id;
-        
-        if (!botOwnerId) {
-            await sock.sendMessage(jid, {
-                text: '❌ Bot owner not set yet. Please wait for bot to initialize.'
-            });
-            return;
-        }
-        
-        // Check if user is bot owner (using the same pattern as your index.js)
-        if (sender !== botOwnerId) {
+        // Check if user is bot owner (same pattern as vv command)
+        if (sender !== ownerId) {
             await sock.sendMessage(jid, {
                 text: '❌ Owner only command'
             });
@@ -130,6 +128,8 @@ export async function execute(sock, m) {
     }
 }
 
+// Monitor to set owner when bot starts (same pattern as vv command)
 export const monitor = (sock) => {
-    console.log('🎨 Chr command loaded: .chr');
+    ownerId = sock.user.id;
+    console.log(`👑 Chr Command - Owner set to: ${ownerId}`);
 };

@@ -1,107 +1,83 @@
-import { fileURLToPath } from 'url';
-import path from 'path';
+module.exports = [ 
+  {
+    command: ["channel-react"],
+    alias: ["chr", "creact", "chreact", "reactch"],
+    description: "React to channel messages with stylized text",
+    category: "Owner",
+    use: ".chr <channel-link> <text>",
+    filename: __filename,
 
-const __filename = fileURLToPath(import.meta.url);
+    async execute(message, { ednut: conn, args, isOwner, reply }) {
+      // 🔹 Map of characters to styled characters
+      const charMap = {
+        a: "🅐", b: "🅑", c: "🅒", d: "🅓", e: "🅔",
+        f: "🅕", g: "🅖", h: "🅗", i: "🅘", j: "🅙",
+        k: "🅚", l: "🅛", m: "🅜", n: "🅝", o: "🅞",
+        p: "🅟", q: "🅠", r: "🅡", s: "🅢", t: "🅣",
+        u: "🅤", v: "🅥", w: "🅦", x: "🅧", y: "🅨", z: "🅩",
+        0: "⓿", 1: "➊", 2: "➋", 3: "➌", 4: "➍",
+        5: "➎", 6: "➏", 7: "➐", 8: "➑", 9: "➒"
+      };
 
-// Map of characters to styled characters
-const charMap = {
-  a: "🅐", b: "🅑", c: "🅒", d: "🅓", e: "🅔",
-  f: "🅕", g: "🅖", h: "🅗", i: "🅘", j: "🅙",
-  k: "🅚", l: "🅛", m: "🅜", n: "🅝", o: "🅞",
-  p: "🅟", q: "🅠", r: "🅡", s: "🅢", t: "🅣",
-  u: "🅤", v: "🅥", w: "🅦", x: "🅧", y: "🅨", z: "🅩",
-  0: "⓿", 1: "➊", 2: "➋", 3: "➌", 4: "➍",
-  5: "➎", 6: "➏", 7: "➐", 8: "➑", 9: "➒"
-};
-
-export const command = 'chr';
-
-export async function execute(sock, m) {
-    const jid = m.key.remoteJid;
-    const sender = m.sender || m.key.participant || m.key.remoteJid;
-    
-    // Use global bot owner from index.js
-    const botOwner = globalThis.botOwner;
-    
-    // Debug: Log the sender and botOwner
-    console.log('Sender:', sender);
-    console.log('Bot Owner:', botOwner);
-    
-    if (!botOwner) {
-        await sock.sendMessage(jid, {
-            text: '❌ Bot owner not set yet. Please wait for bot to initialize.'
-        });
-        return;
-    }
-    
-    // Check if user is bot owner
-    if (sender !== botOwner) {
-        console.log('Permission denied: Sender is not owner');
-        await sock.sendMessage(jid, {
-            text: '❌ Owner only command'
-        });
-        return;
-    }
-    
-    try {
-        // Get message text
-        let text = '';
-        if (m.message.conversation) {
-            text = m.message.conversation;
-        } else if (m.message.extendedTextMessage?.text) {
-            text = m.message.extendedTextMessage.text;
-        } else if (m.message.imageMessage?.caption) {
-            text = m.message.imageMessage.caption;
-        } else if (m.message.videoMessage?.caption) {
-            text = m.message.videoMessage.caption;
+      try {
+        // ✅ Only owner can use this command
+        if (!isOwner) {
+          return reply("❌ Owner only command");
         }
-        
-        // Extract arguments
-        const args = text.split(' ').slice(1); // Remove the command part
-        if (args.length < 2) {
-            await sock.sendMessage(jid, {
-                text: '⚠️ Usage: .chr <channel-link> <text>\n\nExample: .chr https://whatsapp.com/channel/1234567890ABCDEFGHIJ hello'
-            });
-            return;
+
+        // ✅ Require arguments
+        if (!args[0]) {
+          return reply("⚠️ Usage: .chr <channel-link> <text>");
         }
-        
-        const channelLink = args[0];
-        const inputText = args.slice(1).join(' ').toLowerCase();
-        
-        // Validate channel link
+
+        const [channelLink, ...textParts] = args;
+
+        // ✅ Validate channel link
         if (!channelLink.includes("whatsapp.com/channel/")) {
-            await sock.sendMessage(jid, {
-                text: '❌ Invalid channel link format. Must contain "whatsapp.com/channel/"'
-            });
-            return;
+          return reply("❌ Invalid channel link format");
         }
-        
-        if (!inputText) {
-            await sock.sendMessage(jid, {
-                text: '❌ Please provide text to convert'
-            });
-            return;
-        }
-        
-        // Convert characters to styled versions
-        const styledText = inputText
-            .split('')
-            .map(ch => (ch === ' ' ? '―' : charMap[ch] || ch))
-            .join('');
-        
-        // For now, just show the result since newsletter API might not be available
-        await sock.sendMessage(jid, {
-            text: `🎨 *STYLIZED TEXT GENERATED*\n\nInput: ${inputText}\nOutput: ${styledText}\n\nNote: This is a text conversion demo. Channel reaction API might not be available.`
-        });
-        
-    } catch (err) {
-        console.error('Error in chr command:', err);
-        await sock.sendMessage(jid, {
-            text: `❎ Error: ${err.message || 'Failed to process command'}`
-        });
-    }
-}
 
-export const monitor = (sock) => {
-    console.log('✅ Chr command loaded: .chr');
-};
+        // ✅ Join words into a text string
+        const inputText = textParts.join(" ").toLowerCase();
+        if (!inputText) {
+          return reply("❌ Please provide text to convert");
+        }
+
+        // ✅ Convert characters to styled versions
+        const styledText = inputText
+          .split("")
+          .map(ch => (ch === " " ? "―" : charMap[ch] || ch))
+          .join("");
+
+        // ✅ Extract channel ID and message ID from the link
+        const parts = channelLink.split("/");
+        const channelId = parts[4];
+        const messageId = parts[5];
+
+        if (!channelId || !messageId) {
+          return reply("❌ Invalid link - missing IDs");
+        }
+
+        // ✅ Fetch channel metadata
+        const channelMeta = await conn.newsletterMetadata("invite", channelId);
+
+        // ✅ Send reaction
+        await conn.newsletterReactMessage(channelMeta.id, messageId, styledText);
+
+        // ✅ Success response (Icey version)
+        reply(
+          `╭━━━〔 *ICEY-MD* 〕━━━┈⊷\n` +
+          `┃▸ *Success!* Reaction sent\n` +
+          `┃▸ *Channel:* ${channelMeta.name}\n` +
+          `┃▸ *Reaction:* ${styledText}\n` +
+          `╰────────────────┈⊷\n` +
+          `> *© Powered By Icey TechX 🚹*`
+        );
+
+      } catch (err) {
+        console.error("Error in chr:", err);
+        reply(`❎ Error: ${err.message || "Failed to send reaction"}`);
+      }
+    }
+  }
+];

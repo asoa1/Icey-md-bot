@@ -14,25 +14,25 @@ const charMap = {
   5: "➎", 6: "➏", 7: "➐", 8: "➑", 9: "➒"
 };
 
-export const command = 'channel-react';
+export const command = 'chr';
 
 export async function execute(sock, m) {
     const jid = m.key.remoteJid;
     const sender = m.sender || m.key.participant || m.key.remoteJid;
     
     try {
-        // Check if user is bot owner using the same method as your index.js
-        let isOwner = false;
-        try {
-            const publicModule = await import('./public.js');
-            isOwner = publicModule?.isOwner ? publicModule.isOwner(sender) : false;
-        } catch (e) {
-            console.error('Could not load public module:', e);
-            // Fallback to global botOwner check
-            isOwner = sender === globalThis.botOwner;
+        // Get bot owner ID using the same method as your index.js
+        const botOwnerId = globalThis.botOwner || sock.user?.id;
+        
+        if (!botOwnerId) {
+            await sock.sendMessage(jid, {
+                text: '❌ Bot owner not set yet. Please wait for bot to initialize.'
+            });
+            return;
         }
         
-        if (!isOwner) {
+        // Check if user is bot owner (using the same pattern as your index.js)
+        if (sender !== botOwnerId) {
             await sock.sendMessage(jid, {
                 text: '❌ Owner only command'
             });
@@ -45,13 +45,17 @@ export async function execute(sock, m) {
             text = m.message.conversation;
         } else if (m.message.extendedTextMessage?.text) {
             text = m.message.extendedTextMessage.text;
+        } else if (m.message.imageMessage?.caption) {
+            text = m.message.imageMessage.caption;
+        } else if (m.message.videoMessage?.caption) {
+            text = m.message.videoMessage.caption;
         }
         
         // Extract arguments
         const args = text.split(' ').slice(1); // Remove the command part
         if (args.length < 2) {
             await sock.sendMessage(jid, {
-                text: '⚠️ Usage: .channel-react <channel-link> <text>'
+                text: '⚠️ Usage: .chr <channel-link> <text>\n\nExample: .chr https://whatsapp.com/channel/1234567890ABCDEFGHIJ hello'
             });
             return;
         }
@@ -91,45 +95,41 @@ export async function execute(sock, m) {
             return;
         }
         
-        // Try to get channel metadata
+        // Try to use the newsletter API if available
         try {
-            const channelMeta = await sock.newsletterMetadata("invite", channelId);
-            
-            // For this demo, we'll simulate the reaction since newsletterReactMessage might not be available
-            await sock.sendMessage(jid, {
-                text: `✅ *REACTION SIMULATED*\n\nChannel: ${channelMeta.name || 'Unknown'}\nReaction: ${styledText}\n\nNote: newsletterReactMessage API might not be available in this Baileys version`
-            });
-            
-            // If the API is available, you would use:
-            // await sock.newsletterReactMessage(channelMeta.id, messageId, styledText);
+            // Check if the newsletter functions exist
+            if (typeof sock.newsletterMetadata === 'function' && 
+                typeof sock.newsletterReactMessage === 'function') {
+                
+                const channelMeta = await sock.newsletterMetadata("invite", channelId);
+                
+                // For a real implementation, you would need the message ID too
+                // This is a simplified version that just shows the capability
+                await sock.sendMessage(jid, {
+                    text: `✅ *CHANNEL REACTION READY*\n\nChannel: ${channelMeta.name || 'Unknown'}\nReaction: ${styledText}\n\nNote: This is a preview. Full implementation requires message ID.`
+                });
+            } else {
+                // Fallback if newsletter API is not available
+                await sock.sendMessage(jid, {
+                    text: `🎨 *STYLIZED TEXT GENERATED*\n\nInput: ${inputText}\nOutput: ${styledText}\n\nNote: Newsletter API not available in this Baileys version.`
+                });
+            }
             
         } catch (error) {
             console.error('Channel API error:', error);
             await sock.sendMessage(jid, {
-                text: `⚠️ *Channel API Not Available*\n\nSimulated reaction: ${styledText}\n\nError: ${error.message || 'Newsletter API not supported'}`
+                text: `✅ *TEXT CONVERSION COMPLETE*\n\nOriginal: ${inputText}\nStyled: ${styledText}\n\nError with channel API: ${error.message || 'Not supported'}`
             });
         }
         
     } catch (err) {
-        console.error('Error in channel-react:', err);
+        console.error('Error in chr command:', err);
         await sock.sendMessage(jid, {
-            text: `❎ Error: ${err.message || 'Failed to process channel reaction'}`
+            text: `❎ Error: ${err.message || 'Failed to process command'}`
         });
     }
 }
 
-// Create alias commands
-export const chrCommand = 'chr';
-export const creactCommand = 'creact';
-export const chreactCommand = 'chreact';
-export const reactchCommand = 'reactch';
-
-// All aliases use the same execute function
-export async function chrExecute(sock, m) { return execute(sock, m); }
-export async function creactExecute(sock, m) { return execute(sock, m); }
-export async function chreactExecute(sock, m) { return execute(sock, m); }
-export async function reactchExecute(sock, m) { return execute(sock, m); }
-
 export const monitor = (sock) => {
-    console.log('🎨 Channel react commands loaded: .channel-react, .chr, .creact, .chreact, .reactch');
+    console.log('🎨 Chr command loaded: .chr');
 };

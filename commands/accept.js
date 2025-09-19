@@ -1,89 +1,67 @@
-// Group Join Requests Manager
-// Commands: .requestlist, .acceptall, .rejectall
+module.exports = {
+  commands: ["requestlist", "acceptall", "rejectall"],
+  description: "Manage group join requests (list, accept all, reject all)",
+  category: "group",
 
-module.exports = async (sock, m, args, command) => {
-  try {
-    // Ensure this is a group
-    if (!m.isGroup) {
-      return sock.sendMessage(m.chat, { text: "❌ This command only works in groups." }, { quoted: m });
+  async execute(message, { conn, command }) {
+    const chatId = message.chat;
+
+    // ✅ Check group context
+    if (!message.isGroup) {
+      return message.reply("❌ This command can only be used in groups.");
     }
 
-    const metadata = await sock.groupMetadata(m.chat);
-
-    // Find all group admins
-    const groupAdmins = metadata.participants
-      .filter(p => p.admin !== null)
-      .map(p => p.id);
-
-    const botNumber = sock.user.id.split(":")[0] + "@s.whatsapp.net";
-
-    // Check if user is an admin
-    if (!groupAdmins.includes(m.sender)) {
-      return sock.sendMessage(m.chat, { text: "❌ You must be an admin to use this command." }, { quoted: m });
+    // ✅ Check if user is admin
+    if (!message.isAdmin) {
+      return message.reply("❌ Only group admins can use this command.");
     }
 
-    // Check if bot is an admin
-    if (!groupAdmins.includes(botNumber)) {
-      return sock.sendMessage(m.chat, { text: "❌ I need to be an admin to manage join requests." }, { quoted: m });
+    // ✅ Check if bot is admin
+    if (!message.isBotAdmin) {
+      return message.reply("❌ I need to be an admin to manage join requests.");
     }
 
-    // Fetch pending join requests
-    const requests = await sock.groupRequestParticipantsList(m.chat);
+    try {
+      const requests = await conn.groupRequestParticipantsList(chatId);
 
-    if (command === "requestlist") {
       if (!requests || requests.length === 0) {
-        return sock.sendMessage(m.chat, { text: "✅ No pending join requests." }, { quoted: m });
+        return message.reply("ℹ️ No pending join requests.");
       }
 
-      let text = "📋 *Pending Join Requests:*\n\n";
-      requests.forEach((u, i) => {
-        text += `${i + 1}. @${u.jid.split("@")[0]}\n`;
-      });
+      if (command === "requestlist") {
+        // 📋 Show pending requests
+        let listText = "📋 Pending Join Requests:\n\n";
+        requests.forEach((req, index) => {
+          listText += `${index + 1}. @${req.jid.split("@")[0]}\n`;
+        });
 
-      await sock.sendMessage(
-        m.chat,
-        { text, mentions: requests.map(u => u.jid) },
-        { quoted: m }
-      );
-    }
-
-    if (command === "acceptall") {
-      if (!requests || requests.length === 0) {
-        return sock.sendMessage(m.chat, { text: "✅ No pending requests to accept." }, { quoted: m });
+        return conn.sendMessage(
+          chatId,
+          { text: listText },
+          { mentions: requests.map(r => r.jid) }
+        );
       }
 
-      await sock.groupRequestParticipantsUpdate(
-        m.chat,
-        requests.map(u => u.jid),
-        "approve"
-      );
-
-      return sock.sendMessage(
-        m.chat,
-        { text: `✅ Approved ${requests.length} pending requests.` },
-        { quoted: m }
-      );
-    }
-
-    if (command === "rejectall") {
-      if (!requests || requests.length === 0) {
-        return sock.sendMessage(m.chat, { text: "✅ No pending requests to reject." }, { quoted: m });
+      if (command === "acceptall") {
+        // ✅ Accept all requests
+        for (const req of requests) {
+          await conn.groupRequestParticipantsUpdate(chatId, [req.jid], "approve");
+          await new Promise(r => setTimeout(r, 1500)); // prevent flooding
+        }
+        return message.reply(`✅ Approved ${requests.length} join requests.`);
       }
 
-      await sock.groupRequestParticipantsUpdate(
-        m.chat,
-        requests.map(u => u.jid),
-        "reject"
-      );
-
-      return sock.sendMessage(
-        m.chat,
-        { text: `❌ Rejected ${requests.length} pending requests.` },
-        { quoted: m }
-      );
+      if (command === "rejectall") {
+        // ❌ Reject all requests
+        for (const req of requests) {
+          await conn.groupRequestParticipantsUpdate(chatId, [req.jid], "reject");
+          await new Promise(r => setTimeout(r, 1500)); // prevent flooding
+        }
+        return message.reply(`❌ Rejected ${requests.length} join requests.`);
+      }
+    } catch (err) {
+      console.error(err);
+      return message.reply("❌ Error handling join requests. (Check Baileys version)");
     }
-  } catch (err) {
-    console.error(err);
-    sock.sendMessage(m.chat, { text: "⚠️ Error while processing request." }, { quoted: m });
   }
 };

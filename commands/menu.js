@@ -99,6 +99,7 @@ ${ice} ᴠᴇʀꜱɪᴏɴ : *ICEY-MD*
 ┃${ice} .setaza
 ┃${ice} .ss
 ┃${ice} .sticker
+┃${ice} .txt2img
 ┃└──────────
 
 ${ice} *ICEY MD* — Always watching, always online.

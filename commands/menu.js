@@ -2,7 +2,7 @@
 export const command = 'menu';
 
 function fmtUptime() {
-  const total = Math.floor(process.uptime()); // seconds
+  const total = Math.floor(process.uptime());
   const days = Math.floor(total / 86400);
   const hours = Math.floor((total % 86400) / 3600);
   const minutes = Math.floor((total % 3600) / 60);
@@ -17,25 +17,21 @@ function fmtUptime() {
 
 export async function execute(sock, m) {
   const jid = m.key.remoteJid;
-  // Try to determine sender display name
-  const senderName = m.pushName || (m.key.participant ? m.key.participant.split('@')[0] : (m.key.remoteJid || '').split('@')[0]);
+  const senderName = m.pushName || (m.key.participant ? m.key.participant.split('@')[0] : (jid || '').split('@')[0]);
 
-  // Try to determine owner JID/name. Your index.js already sets globalThis.botOwner = sock.user.id
   const ownerJid = globalThis.botOwner || process.env.OWNER_JID || null;
   let ownerName = 'ICEY';
   if (ownerJid) {
     try {
-      // best-effort: ask WhatsApp for cached info; onWhatsApp returns array with info
       const info = await sock.onWhatsApp([ownerJid]);
       if (info && info[0] && info[0].notify) ownerName = info[0].notify;
       else ownerName = ownerJid.split('@')[0];
-    } catch (err) {
+    } catch {
       ownerName = ownerJid.split('@')[0];
     }
   }
 
   const runtime = fmtUptime();
-
   const ice = '❄️';
 
   const menuText = `
@@ -51,8 +47,7 @@ ${ice} ᴠᴇʀꜱɪᴏɴ : *ICEY-MD*
 ┃┌─〔 👑  OWNER 〕
 ┃${ice} .owner
 ┃${ice} .update
-┃┃${ice} .setpp
-┃${ice} .setppbot
+┃${ice} .setpp
 ┃${ice} .statusdl
 ┃${ice} .bot
 ┃└──────────
@@ -81,7 +76,7 @@ ${ice} ᴠᴇʀꜱɪᴏɴ : *ICEY-MD*
 ┃${ice} .secure
 ┃└──────────
 
-┃┌─〔 👤  ACCOUNT / DM-LIKE 〕
+┃┌─〔 👤  ACCOUNT / USER 〕
 ┃${ice} .adduser
 ┃${ice} .antidelete
 ┃${ice} .aza
@@ -90,45 +85,28 @@ ${ice} ᴠᴇʀꜱɪᴏɴ : *ICEY-MD*
 ┃${ice} .getpp
 ┃└──────────
 
-┃┌─〔 🆘  HELP / UTIL 〕
+┃┌─〔 🆘  UTILITIES 〕
 ┃${ice} .help
 ┃${ice} .msg
 ┃${ice} .menu
-┃${ice} .owner
 ┃${ice} .public
-┃┃${ice} .ping
+┃${ice} .ping
 ┃${ice} .speed
 ┃└──────────
 
-┃┌─〔 📥  MEDIA / DOWNLOAD 〕
+┃┌─〔 📥  MEDIA 〕
 ┃${ice} .play
 ┃${ice} .vv
 ┃${ice} .setaza
-┃${ice} .setpp
 ┃${ice} .ss
-┃${ice} .statusdl
 ┃${ice} .sticker
 ┃└──────────
-
-┃┌─〔 🛠  OTHER 〕
-┃${ice} .update
-┃${ice} .vv
-┃${ice} .getpp
-┃┃${ice} .msg
-┃${ice} .speed
-┃${ice} .ss
-┃${ice} .statusdl
-┃${ice} .sticker
-┃└──────────
-
-• *Tip:* Use the dot prefix before each command (e.g. \`.play <song>\`)
 
 ${ice} *ICEY MD* — Always watching, always online.
 `.trim();
 
   try {
     const mentionArray = [];
-    // mention the sender and owner if available
     if (m.sender) mentionArray.push(m.sender);
     if (ownerJid) mentionArray.push(ownerJid);
 
@@ -142,12 +120,10 @@ ${ice} *ICEY MD* — Always watching, always online.
     });
   } catch (error) {
     console.error('Menu command error:', error);
-    try {
-      await sock.sendMessage(jid, { text: '⚠️ ICEY could not load the menu.' });
-    } catch (e) { /* ignore */ }
+    await sock.sendMessage(jid, { text: '⚠️ ICEY could not load the menu.' });
   }
 }
 
-export const monitor = (sock) => {
+export const monitor = () => {
   console.log('✅ ICEY menu command loaded');
 };

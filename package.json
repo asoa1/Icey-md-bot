@@ -32,15 +32,12 @@
     "youtube-sr": "^4.3.11",
     "yt-search": "^2.13.1",
     "ytdl-core": "^4.11.5",
-    "ytsr": "^3.8.4"
+    "ytsr": "^3.8.4",
+    "youtube-yts": "^2.0.0"
   },
   "engines": {
     "node": ">=16.0.0"
   },
   "author": "ICEY",
   "license": "MIT"
-}
-"dependencies": {
-  "axios": "^1.6.7",
-  "youtube-yts": "^2.0.0"
 }

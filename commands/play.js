@@ -1,92 +1,76 @@
-// commands/play.js
-import fs from "fs";
-import path from "path";
-import { promisify } from "util";
-import { fileURLToPath } from "url";
-import ytdl from "@distube/ytdl-core";
-import ffmpeg from "fluent-ffmpeg";
-import ffmpegPath from "ffmpeg-static";
-import ytSearch from "yt-search";
+// commands/ytplay.js
+import yts from "youtube-yts";
+import axios from "axios";
 
-const unlinkAsync = promisify(fs.unlink);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-export const command = "play";
+export const command = "ytplay";
+export const alias = ["play", "song", "music"];
+export const description = "Search and play a song from YouTube as audio";
+export const category = "Downloader";
 
 export async function execute(sock, m) {
-  const jid = m.key.remoteJid;
-
-  // Extract raw text from the message
-  const raw =
-    m.message?.conversation ||
-    m.message?.extendedTextMessage?.text ||
-    m.message?.imageMessage?.caption ||
-    m.message?.videoMessage?.caption ||
-    m.message?.documentMessage?.caption ||
-    "";
-
-  // Get query (remove ".play")
-  let query = raw;
-  if (query.toLowerCase().startsWith(".play")) {
-    query = query.slice(5).trim();
-  }
-
-  if (!query) {
-    await sock.sendMessage(jid, {
-      text: "❌ Please provide a song name. Example: `.play despacito`",
-    });
-    return;
-  }
-
   try {
-    await sock.sendMessage(jid, {
-      text: `⏳ Searching YouTube for *${query}*...`,
-    });
+    const text =
+      m.message?.conversation ||
+      m.message?.extendedTextMessage?.text ||
+      "";
 
-    // 🔍 Search YouTube
-    const search = await ytSearch(query);
-    if (!search || !search.videos || search.videos.length === 0) {
-      await sock.sendMessage(jid, { text: "❌ No YouTube results found." });
-      return;
+    if (!text.trim()) {
+      return await sock.sendMessage(m.key.remoteJid, {
+        text: "❌ Please provide a song name.\nExample: `.play Believer`"
+      });
     }
 
-    const video = search.videos[0];
-    await sock.sendMessage(jid, {
-      text: `🎵 Found: *${video.title}*\n⏳ Downloading & converting to MP3...`,
-    });
-
-    // Temp output file
-    const outFile = path.join(__dirname, `../temp-${Date.now()}.mp3`);
-
-    // Download + convert
-    await new Promise((resolve, reject) => {
-      const stream = ytdl(video.url, {
-        filter: "audioonly",
-        quality: "highestaudio",
+    // 🔎 Search YouTube
+    const search = await yts(text.trim());
+    const video = search.all?.[0];
+    if (!video) {
+      return await sock.sendMessage(m.key.remoteJid, {
+        text: "❌ No video found for: " + text
       });
+    }
 
-      ffmpeg(stream)
-        .setFfmpegPath(ffmpegPath)
-        .audioBitrate(128)
-        .format("mp3")
-        .on("error", (err) => reject(err))
-        .on("end", () => resolve())
-        .save(outFile);
+    const videoUrl = video.url;
+    const title = video.title || text;
+
+    await sock.sendMessage(m.key.remoteJid, {
+      text: `📥 Downloading...\n\n▶️ *${title}*`
     });
 
-    // ✅ FIXED: Use Buffer instead of createReadStream
-    const audioBuffer = fs.readFileSync(outFile);
+    // 🔗 Fetch audio from downloader API
+    const apiUrl =
+      "https://izumiiiiiiii.dpdns.org/downloader/youtube?url=" +
+      encodeURIComponent(videoUrl) +
+      "&format=mp3";
 
-    await sock.sendMessage(jid, {
-      audio: audioBuffer,
-      mimetype: "audio/mp4", // WhatsApp prefers this
-      ptt: false, // true if you want it as a voice note
-    });
+    const { data } = await axios.get(apiUrl);
 
-    await unlinkAsync(outFile).catch(() => {});
+    if (!data?.status || !data.result?.download) {
+      return await sock.sendMessage(m.key.remoteJid, {
+        text: "❌ Failed to fetch audio."
+      });
+    }
+
+    const audioUrl = data.result.download;
+
+    // 🎵 Send audio file
+    await sock.sendMessage(
+      m.key.remoteJid,
+      {
+        audio: { url: audioUrl },
+        mimetype: "audio/mpeg",
+        fileName: title + ".mp3",
+        ptt: false
+      },
+      { quoted: m }
+    );
   } catch (err) {
-    console.error("Play command error:", err);
-    await sock.sendMessage(jid, { text: `❌ Error: ${err?.message || err}` });
+    console.error("ytplay error:", err);
+    await sock.sendMessage(m.key.remoteJid, {
+      text: "⚠️ Error: " + (err.message || err)
+    });
   }
 }
+
+export const monitor = () => {
+  console.log("✅ ytplay command loaded");
+};

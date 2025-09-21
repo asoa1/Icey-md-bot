@@ -1,32 +1,28 @@
+// commands/ping.js
 export const command = 'ping';
-export const execute = async (sock, m) => {
-  const jid = m.key.remoteJid;
 
-  const latency = Date.now() - (m.messageTimestamp * 1000);
-  const uptime = process.uptime();
+export async function execute(sock, m) {
+  try {
+    const start = performance.now();
 
-  // Pick a random "vibe"
-  const vibes = [
-    "⚡ Zooming through cyberspace...",
-    "🚀 Warp speed engaged!",
-    "🌌 The Matrix is stable...",
-    "🔥 Power levels OVER 9000!!!",
-    "🎯 Laser sharp response!"
-  ];
-  const vibe = vibes[Math.floor(Math.random() * vibes.length)];
+    // test sending a dummy packet (faster than sending full message)
+    await sock.presenceSubscribe(m.key.remoteJid);
 
-  // Build cooler response
-  const pingResponse = `
-╭───🏓 PING SYSTEM 🏓───╮
-│
-│  ⚡ Latency : ${latency}ms
-│  💫 Uptime  : ${Math.floor(uptime)}s
-│  🌐 Status  : ONLINE ✅
-│
-╰───────────────────────╯
+    const end = performance.now();
+    const speed = (end - start).toFixed(2); // milliseconds
 
-${vibe}
-  `;
+    const response = `
+\`\`\`🧊 ɪᴄᴇʏ-ᴍᴅ-ᴘᴀɪʀ 🧊\`\`\`
+➤   ⚡ 𝚂𝙿𝙴𝙴𝙳 : ${speed} ᴍs
+    `.trim();
 
-  await sock.sendMessage(jid, { text: pingResponse });
+    await sock.sendMessage(m.key.remoteJid, { text: response });
+  } catch (err) {
+    console.error("Ping error:", err);
+    await sock.sendMessage(m.key.remoteJid, { text: "⚠️ Failed to calculate ping." });
+  }
+}
+
+export const monitor = () => {
+  console.log("✅ ICEY ping command loaded");
 };

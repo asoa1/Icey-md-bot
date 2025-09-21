@@ -40,3 +40,7 @@
   "author": "ICEY",
   "license": "MIT"
 }
+"dependencies": {
+  "axios": "^1.6.7",
+  "youtube-yts": "^2.0.0"
+}

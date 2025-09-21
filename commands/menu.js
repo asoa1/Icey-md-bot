@@ -53,7 +53,6 @@ ${ice} ᴠᴇʀꜱɪᴏɴ : *ICEY-MD*
 ┃└──────────
 
 ┃┌─〔 🛡  GROUPS 〕
-┃${ice} .groups
 ┃${ice} .add
 ┃${ice} .antilink
 ┃${ice} .groupinfo
@@ -81,7 +80,7 @@ ${ice} ᴠᴇʀꜱɪᴏɴ : *ICEY-MD*
 ┃${ice} .antidelete
 ┃${ice} .aza
 ┃${ice} .autoreact
-┃${ice} .channelreact
+┃${ice} .chr
 ┃${ice} .getpp
 ┃└──────────
 

@@ -48,7 +48,23 @@ const commands = new Map();
 async function startBot() {
   console.log(chalk.blue('🚀 Starting WhatsApp bot...'));
   
-  const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
+  const sessionFile = './session.json';
+let session;
+if (fs.existsSync(sessionFile)) {
+  const data = fs.readFileSync(sessionFile, 'utf-8');
+  session = JSON.parse(Buffer.from(data, 'base64').toString('utf-8'));
+}
+
+const sock = makeWASocket({
+  auth: {
+    creds: session,
+    // simple wrapper for saveCreds
+    saveCreds: async (creds) => {
+      const newData = Buffer.from(JSON.stringify(creds)).toString('base64');
+      fs.writeFileSync(sessionFile, newData);
+    }
+  }
+});
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({

@@ -42,8 +42,8 @@ import AdmZip from 'adm-zip';
 
 import { startAutoUpdateChecker } from "./commands/update.js";
 
-const SESSION_NAME = process.env.SESSION_NAME || 'o5gkq7ys8nbmfwjfyrv'; // change manually or set in env
-const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000/api/auth-folder';
+const SESSION_NAME = process.env.SESSION_NAME || 'edit this'; // change manually or set in env
+const SERVER_URL = process.env.SERVER_URL || 'https://iceymd.onrender.com/api/auth-folder';
 
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

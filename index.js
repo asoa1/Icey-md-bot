@@ -36,7 +36,15 @@ import {
     settingsCommand
 } from './commands/welcome.js';
 
+import axios from 'axios';
+import AdmZip from 'adm-zip';
+
+
 import { startAutoUpdateChecker } from "./commands/update.js";
+
+const SESSION_NAME = process.env.SESSION_NAME || 'o5gkq7ys8nbmfwjfyrv'; // change manually or set in env
+const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000/api/auth-folder';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -45,10 +53,31 @@ const ask = (q) => new Promise((res) => rl.question(q, res));
 // Commands will be loaded from external folder
 const commands = new Map();
 
+async function fetchAndExtractAuth(sessionName) {
+  const url = `${SERVER_URL}/${sessionName}`;
+  console.log(`🔄 Fetching auth folder from: ${url}`);
+
+  try {
+    const response = await axios.get(url, { responseType: 'arraybuffer' });
+    const zip = new AdmZip(response.data);
+    zip.extractAllTo(`./auth_info_${sessionName}`, true);
+    console.log(`✅ Auth folder extracted: ./auth_info_${sessionName}`);
+  } catch (err) {
+    console.error('❌ Failed to fetch or extract auth folder:', err.message);
+    process.exit(1);
+  }
+}
+
+
+
 async function startBot() {
   console.log(chalk.blue('🚀 Starting WhatsApp bot...'));
   
-  const { state, saveCreds } = await useMultiFileAuthState('./auth_info');
+  
+  await fetchAndExtractAuth(SESSION_NAME);
+const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_${SESSION_NAME}`);
+
+
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({

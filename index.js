@@ -48,6 +48,24 @@ const ask = (q) => new Promise((res) => rl.question(q, res));
 // Commands will be loaded from external folder
 const commands = new Map();
 
+
+process.on("uncaughtException", (err) => {
+  if (err.message && err.message.includes("Bad MAC")) {
+    // Ignore "Bad MAC" errors silently
+    return;
+  }
+  console.error("❌ Uncaught Exception:", err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  if (reason && reason.message && reason.message.includes("Bad MAC")) {
+    // Ignore "Bad MAC" errors silently
+    return;
+  }
+  console.error("❌ Unhandled Rejection:", reason);
+});
+
+
 async function startBot() {
   console.log(chalk.blue('🚀 Starting WhatsApp bot...'));
 

@@ -42,10 +42,6 @@ import AdmZip from 'adm-zip';
 
 import { startAutoUpdateChecker } from "./commands/update.js";
 
-const SESSION_NAME = process.env.SESSION_NAME || 'edit this'; // change manually or set in env
-const SERVER_URL = process.env.SERVER_URL || 'https://iceymd.onrender.com/api/auth-folder';
-
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const ask = (q) => new Promise((res) => rl.question(q, res));
@@ -53,30 +49,95 @@ const ask = (q) => new Promise((res) => rl.question(q, res));
 // Commands will be loaded from external folder
 const commands = new Map();
 
+// === NEW: Function to find existing auth folders ===
+function findExistingAuthFolders() {
+  try {
+    const items = fs.readdirSync(__dirname);
+    const authFolders = items.filter(item => {
+      return item.startsWith('auth_info_') && 
+             fs.statSync(path.join(__dirname, item)).isDirectory();
+    });
+    return authFolders;
+  } catch (error) {
+    return [];
+  }
+}
+
+// === NEW: Function to get session name from auth folder ===
+function getSessionNameFromAuthFolder(authFolder) {
+  return authFolder.replace('auth_info_', '');
+}
+
+// === UPDATED: Function to detect or ask for session name ===
+async function detectOrAskForSession() {
+  const existingAuthFolders = findExistingAuthFolders();
+  
+  if (existingAuthFolders.length > 0) {
+    console.log(chalk.blue('🔍 Found existing auth folders:'));
+    existingAuthFolders.forEach((folder, index) => {
+      const session = getSessionNameFromAuthFolder(folder);
+      console.log(chalk.green(`   ${index + 1}. ${session}`));
+    });
+    
+    if (existingAuthFolders.length === 1) {
+      // Auto-select if only one auth folder exists
+      const sessionName = getSessionNameFromAuthFolder(existingAuthFolders[0]);
+      console.log(chalk.green(`✅ Auto-selected session: ${sessionName}`));
+      return sessionName;
+    } else {
+      // Ask user to choose if multiple auth folders exist
+      const answer = await ask(chalk.blue(`\n🔢 Select session (1-${existingAuthFolders.length}) or enter new session name: `));
+      
+      const choice = parseInt(answer);
+      if (!isNaN(choice) && choice >= 1 && choice <= existingAuthFolders.length) {
+        const sessionName = getSessionNameFromAuthFolder(existingAuthFolders[choice - 1]);
+        console.log(chalk.green(`✅ Selected session: ${sessionName}`));
+        return sessionName;
+      } else {
+        const sessionName = answer.trim();
+        console.log(chalk.green(`✅ Using new session: ${sessionName}`));
+        return sessionName;
+      }
+    }
+  } else {
+    // No existing auth folders, ask for session name
+    const sessionName = await ask(chalk.blue("❖ ICEY SETUP ❖\n╭────────────────╼\n╎ Enter Session Name : \n╰────────────────╼ "));
+    return sessionName.trim();
+  }
+}
+
+// === UPDATED: fetchAndExtractAuth function to skip if folder exists ===
 async function fetchAndExtractAuth(sessionName) {
-  const url = `${SERVER_URL}/${sessionName}`;
-  console.log(`🔄 Fetching auth folder from: ${url}`);
+  const authFolderPath = `./auth_info_${sessionName}`;
+  
+  // Check if auth folder already exists
+  if (fs.existsSync(authFolderPath)) {
+    console.log(chalk.green(`✅ Using existing auth folder: ${authFolderPath}`));
+    return; // Skip download if folder exists
+  }
+  
+  const url = `${process.env.SERVER_URL || 'https://iceymd.onrender.com/api/auth-folder'}/${sessionName}`;
+  console.log(chalk.blue(`🔄 Fetching auth folder from: ${url}`));
 
   try {
     const response = await axios.get(url, { responseType: 'arraybuffer' });
     const zip = new AdmZip(response.data);
-    zip.extractAllTo(`./auth_info_${sessionName}`, true);
-    console.log(`✅ Auth folder extracted: ./auth_info_${sessionName}`);
+    zip.extractAllTo(authFolderPath, true);
+    console.log(chalk.green(`✅ Auth folder extracted: ${authFolderPath}`));
   } catch (err) {
-    console.error('❌ Failed to fetch or extract auth folder:', err.message);
+    console.error(chalk.red('❌ Failed to fetch or extract auth folder:'), err.message);
     process.exit(1);
   }
 }
 
-
-
 async function startBot() {
   console.log(chalk.blue('🚀 Starting WhatsApp bot...'));
   
+  // === NEW: Detect or ask for session name ===
+  const SESSION_NAME = await detectOrAskForSession();
   
   await fetchAndExtractAuth(SESSION_NAME);
-const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_${SESSION_NAME}`);
-
+  const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_${SESSION_NAME}`);
 
   const { version } = await fetchLatestBaileysVersion();
 
@@ -91,24 +152,24 @@ const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_${SESSION_
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', async (update) => {
-  const { connection, lastDisconnect } = update;
-  
-  console.log(chalk.yellow('Connection update:'), connection);
-  
-  if (connection === 'open') {
-    console.log(chalk.green('✅ Connected to WhatsApp server!'));
+    const { connection, lastDisconnect } = update;
+    
+    console.log(chalk.yellow('Connection update:'), connection);
+    
+    if (connection === 'open') {
+      console.log(chalk.green('✅ Connected to WhatsApp server!'));
 
-    // update autochecker
-    startAutoUpdateChecker(sock);
+      // update autochecker
+      startAutoUpdateChecker(sock);
 
-    // Store bot owner automatically (the bot itself)
-    globalThis.botOwner = sock.user.id;
-    console.log(chalk.blue('👑 Bot owner set to:'), globalThis.botOwner);
+      // Store bot owner automatically (the bot itself)
+      globalThis.botOwner = sock.user.id;
+      console.log(chalk.blue('👑 Bot owner set to:'), globalThis.botOwner);
 
-    // Now load commands after successful connection
-    await loadCommands();
+      // Now load commands after successful connection
+      await loadCommands();
 
-    const welcomeCaption = `
+      const welcomeCaption = `
 ✨ *CONNECTION SUCCESSFUL* ✨
 
 👋 Hello! Your WhatsApp bot is now connected and ready.
@@ -121,47 +182,46 @@ const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_${SESSION_
 💫 Powered by *Baileys* library.
 `;
 
-    // Load scheduled messages
-    loadScheduledMessages(sock);
+      // Load scheduled messages
+      loadScheduledMessages(sock);
 
-    try {
-      await sock.sendMessage(sock.user.id, {
-        image: { url: "./media/icey.jpg" }, // replace with your own banner/logo path
-        caption: welcomeCaption
-      });
-      console.log(chalk.green('✅ Welcome message with image sent!'));
-    } catch (e) {
-      console.error('Failed to send welcome message:', e);
-    }
-  }
-
-  if (connection === 'close') {
-    const reason = lastDisconnect?.error?.output?.statusCode;
-    console.log(chalk.yellow('Disconnect reason:'), reason);
-    
-    if (reason !== DisconnectReason.loggedOut) {
-      console.log(chalk.yellow('⚠️ Reconnecting...'));
-      setTimeout(() => startBot(), 2000);
-    } else {
-      console.log(chalk.red('❌ Logged out.'));
-    }
-  }
-  
-  // Request pairing code if not registered
-  if (connection === 'connecting' && !sock.authState.creds.registered) {
-    console.log(chalk.blue('🔐 Authentication required...'));
-    setTimeout(async () => {
       try {
-        const number = await ask('📱 Enter your number with country code (e.g., 1234567890): ');
-        const code = await sock.requestPairingCode(number.trim());
-        console.log(chalk.magenta('🔑 Pairing Code:'), chalk.bold(code));
-      } catch (error) {
-        console.error('Error requesting pairing code:', error);
+        await sock.sendMessage(sock.user.id, {
+          image: { url: "./media/icey.jpg" }, // replace with your own banner/logo path
+          caption: welcomeCaption
+        });
+        console.log(chalk.green('✅ Welcome message with image sent!'));
+      } catch (e) {
+        console.error('Failed to send welcome message:', e);
       }
-    }, 1000);
-  }
-});
+    }
 
+    if (connection === 'close') {
+      const reason = lastDisconnect?.error?.output?.statusCode;
+      console.log(chalk.yellow('Disconnect reason:'), reason);
+      
+      if (reason !== DisconnectReason.loggedOut) {
+        console.log(chalk.yellow('⚠️ Reconnecting...'));
+        setTimeout(() => startBot(), 2000);
+      } else {
+        console.log(chalk.red('❌ Logged out.'));
+      }
+    }
+    
+    // Request pairing code if not registered
+    if (connection === 'connecting' && !sock.authState.creds.registered) {
+      console.log(chalk.blue('🔐 Authentication required...'));
+      setTimeout(async () => {
+        try {
+          const number = await ask('📱 Enter your number with country code (e.g., 1234567890): ');
+          const code = await sock.requestPairingCode(number.trim());
+          console.log(chalk.magenta('🔑 Pairing Code:'), chalk.bold(code));
+        } catch (error) {
+          console.error('Error requesting pairing code:', error);
+        }
+      }, 1000);
+    }
+  });
 
   welcomeMonitor(sock);
 

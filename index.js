@@ -36,10 +36,15 @@ import {
     settingsCommand
 } from './commands/welcome.js';
 
+import axios from 'axios';
+import AdmZip from 'adm-zip';
+
+
 import { startAutoUpdateChecker } from "./commands/update.js";
 
-// session folder (always local)
-const SESSION_NAME = process.env.SESSION_NAME || 'session';
+const SESSION_NAME = process.env.SESSION_NAME || 'edit this'; // change manually or set in env
+const SERVER_URL = process.env.SERVER_URL || 'https://iceymd.onrender.com/api/auth-folder';
+
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -48,29 +53,30 @@ const ask = (q) => new Promise((res) => rl.question(q, res));
 // Commands will be loaded from external folder
 const commands = new Map();
 
+async function fetchAndExtractAuth(sessionName) {
+  const url = `${SERVER_URL}/${sessionName}`;
+  console.log(`🔄 Fetching auth folder from: ${url}`);
 
-process.on("uncaughtException", (err) => {
-  if (err.message && err.message.includes("Bad MAC")) {
-    // Ignore "Bad MAC" errors silently
-    return;
+  try {
+    const response = await axios.get(url, { responseType: 'arraybuffer' });
+    const zip = new AdmZip(response.data);
+    zip.extractAllTo(`./auth_info_${sessionName}`, true);
+    console.log(`✅ Auth folder extracted: ./auth_info_${sessionName}`);
+  } catch (err) {
+    console.error('❌ Failed to fetch or extract auth folder:', err.message);
+    process.exit(1);
   }
-  console.error("❌ Uncaught Exception:", err);
-});
+}
 
-process.on("unhandledRejection", (reason) => {
-  if (reason && reason.message && reason.message.includes("Bad MAC")) {
-    // Ignore "Bad MAC" errors silently
-    return;
-  }
-  console.error("❌ Unhandled Rejection:", reason);
-});
 
 
 async function startBot() {
   console.log(chalk.blue('🚀 Starting WhatsApp bot...'));
+  
+  
+  await fetchAndExtractAuth(SESSION_NAME);
+const { state, saveCreds } = await useMultiFileAuthState(`./auth_info_${SESSION_NAME}`);
 
-  // 🔥 Always use local session folder
-  const { state, saveCreds } = await useMultiFileAuthState(`./${SESSION_NAME}`);
 
   const { version } = await fetchLatestBaileysVersion();
 
@@ -85,24 +91,24 @@ async function startBot() {
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect } = update;
+  const { connection, lastDisconnect } = update;
   
-    console.log(chalk.yellow('Connection update:'), connection);
+  console.log(chalk.yellow('Connection update:'), connection);
   
-    if (connection === 'open') {
-      console.log(chalk.green('✅ Connected to WhatsApp server!'));
+  if (connection === 'open') {
+    console.log(chalk.green('✅ Connected to WhatsApp server!'));
 
-      // update autochecker
-      startAutoUpdateChecker(sock);
+    // update autochecker
+    startAutoUpdateChecker(sock);
 
-      // Store bot owner automatically (the bot itself)
-      globalThis.botOwner = sock.user.id;
-      console.log(chalk.blue('👑 Bot owner set to:'), globalThis.botOwner);
+    // Store bot owner automatically (the bot itself)
+    globalThis.botOwner = sock.user.id;
+    console.log(chalk.blue('👑 Bot owner set to:'), globalThis.botOwner);
 
-      // Now load commands after successful connection
-      await loadCommands();
+    // Now load commands after successful connection
+    await loadCommands();
 
-      const welcomeCaption = `
+    const welcomeCaption = `
 ✨ *CONNECTION SUCCESSFUL* ✨
 
 👋 Hello! Your WhatsApp bot is now connected and ready.
@@ -115,46 +121,47 @@ async function startBot() {
 💫 Powered by *Baileys* library.
 `;
 
-      // Load scheduled messages
-      loadScheduledMessages(sock);
+    // Load scheduled messages
+    loadScheduledMessages(sock);
 
-      try {
-        await sock.sendMessage(sock.user.id, {
-          image: { url: "./media/icey.jpg" }, // replace with your own banner/logo path
-          caption: welcomeCaption
-        });
-        console.log(chalk.green('✅ Welcome message with image sent!'));
-      } catch (e) {
-        console.error('Failed to send welcome message:', e);
-      }
+    try {
+      await sock.sendMessage(sock.user.id, {
+        image: { url: "./media/icey.jpg" }, // replace with your own banner/logo path
+        caption: welcomeCaption
+      });
+      console.log(chalk.green('✅ Welcome message with image sent!'));
+    } catch (e) {
+      console.error('Failed to send welcome message:', e);
     }
+  }
 
-    if (connection === 'close') {
-      const reason = lastDisconnect?.error?.output?.statusCode;
-      console.log(chalk.yellow('Disconnect reason:'), reason);
+  if (connection === 'close') {
+    const reason = lastDisconnect?.error?.output?.statusCode;
+    console.log(chalk.yellow('Disconnect reason:'), reason);
     
-      if (reason !== DisconnectReason.loggedOut) {
-        console.log(chalk.yellow('⚠️ Reconnecting...'));
-        setTimeout(() => startBot(), 2000);
-      } else {
-        console.log(chalk.red('❌ Logged out.'));
-      }
+    if (reason !== DisconnectReason.loggedOut) {
+      console.log(chalk.yellow('⚠️ Reconnecting...'));
+      setTimeout(() => startBot(), 2000);
+    } else {
+      console.log(chalk.red('❌ Logged out.'));
     }
+  }
   
-    // Request pairing code if not registered
-    if (connection === 'connecting' && !sock.authState.creds.registered) {
-      console.log(chalk.blue('🔐 Authentication required...'));
-      setTimeout(async () => {
-        try {
-          const number = await ask('📱 Enter your number with country code (e.g., 1234567890): ');
-          const code = await sock.requestPairingCode(number.trim());
-          console.log(chalk.magenta('🔑 Pairing Code:'), chalk.bold(code));
-        } catch (error) {
-          console.error('Error requesting pairing code:', error);
-        }
-      }, 1000);
-    }
-  });
+  // Request pairing code if not registered
+  if (connection === 'connecting' && !sock.authState.creds.registered) {
+    console.log(chalk.blue('🔐 Authentication required...'));
+    setTimeout(async () => {
+      try {
+        const number = await ask('📱 Enter your number with country code (e.g., 1234567890): ');
+        const code = await sock.requestPairingCode(number.trim());
+        console.log(chalk.magenta('🔑 Pairing Code:'), chalk.bold(code));
+      } catch (error) {
+        console.error('Error requesting pairing code:', error);
+      }
+    }, 1000);
+  }
+});
+
 
   welcomeMonitor(sock);
 
@@ -185,9 +192,53 @@ async function startBot() {
     }
     console.log(chalk.green(`✅ Total commands loaded: ${commands.size}`));
   }
-
   // 🔥 Make reload available everywhere
   globalThis.reloadCommands = loadCommands;
+
+  // ✅ ADD THIS MISSING EVENT HANDLER FOR MESSAGE UPDATES (DELETIONS)
+  sock.ev.on('messages.update', async (updates) => {
+    for (const update of updates) {
+      try {
+        if (!update.key) continue;
+        
+        // Check if this is a message deletion
+        const isDeletion = 
+          update.update?.message === null ||
+          (update.update && Object.keys(update.update).length === 0) ||
+          update.messageStubType === 8; // 8 = message deletion
+        
+        if (isDeletion) {
+          console.log(chalk.yellow(`🗑️ Message deletion detected: ${update.key.id}`));
+          
+          // You can add custom deletion handling logic here
+          // For example, if you want to notify when messages are deleted:
+          /*
+          await sock.sendMessage(sock.user.id, {
+            text: `🗑️ Message was deleted\nID: ${update.key.id}\nChat: ${update.key.remoteJid}`
+          });
+          */
+        }
+      } catch (error) {
+        console.error('Error handling message update:', error);
+      }
+    }
+  });
+
+  // Also handle bulk deletions
+  sock.ev.on('messages.delete', async (item) => {
+    if (item.keys) {
+      console.log(chalk.yellow(`🗑️ Bulk deletion detected: ${item.keys.length} messages`));
+      
+      // You can add custom bulk deletion handling here
+      /*
+      for (const key of item.keys) {
+        await sock.sendMessage(sock.user.id, {
+          text: `🗑️ Message deleted in bulk\nID: ${key.id}\nChat: ${key.remoteJid}`
+        });
+      }
+      */
+    }
+  });
 
   // Message processing handler
   sock.ev.on('messages.upsert', async ({ messages }) => {

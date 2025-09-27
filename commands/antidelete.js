@@ -2,46 +2,69 @@
 import { downloadMediaMessage } from "@whiskeysockets/baileys";
 
 const messageCache = new Map();
-let antiDeleteEnabled = false;
+let antiDeleteChat = false;
+let antiDeleteStatus = false;
 
 export const command = "antidelete";
 
 export async function execute(sock, m) {
     const jid = m.key.remoteJid;
-    const text = m.message.conversation || m.message.extendedTextMessage?.text || "";
+    const text = m.message?.conversation || m.message?.extendedTextMessage?.text || "";
     const args = text.split(" ");
 
     if (args.length < 2) {
-        const status = antiDeleteEnabled ? "🟢 ON" : "🔴 OFF";
+        const chatStatus = antiDeleteChat ? "🟢 ON" : "🔴 OFF";
+        const statusStatus = antiDeleteStatus ? "🟢 ON" : "🔴 OFF";
+        
         await sock.sendMessage(jid, {
-            text: `⚙️ *ANTI-DELETE SETTINGS*\n\nCurrent status: ${status}\n\nUsage:\n• .antidelete on - Enable globally\n• .antidelete off - Disable globally\n\n📨 All deleted messages (text, images, videos, audios, stickers) will be captured and sent to you.`
+            text: `⚙️ *ANTI-DELETE SETTINGS*\n\n📨 Chat Anti-Delete: ${chatStatus}\n📊 Status Anti-Delete: ${statusStatus}\n\nUsage:\n• .antidelete chat on - Enable for chats\n• .antidelete chat off - Disable for chats\n• .antidelete status on - Enable for status\n• .antidelete status off - Disable for status\n• .antidelete all on - Enable both\n• .antidelete all off - Disable both\n\n📨 Captures: text, images, videos, audios, stickers, documents`
         });
         return;
     }
 
-    const action = args[1].toLowerCase();
+    const subCommand = args[1].toLowerCase();
+    const action = args[2]?.toLowerCase();
 
-    if (action === "on") {
-        antiDeleteEnabled = true;
-        await sock.sendMessage(jid, {
-            text: "✅ *ANTI-DELETE ENABLED*\n\nI will now capture all deleted messages (text, stickers, audios, videos, images) and send them to you."
+    if (!action || (action !== "on" && action !== "off")) {
+        await sock.sendMessage(jid, { 
+            text: "❌ Use: .antidelete chat on/off OR .antidelete status on/off" 
         });
-        console.log("✅ Anti-delete enabled globally");
-    } else if (action === "off") {
-        antiDeleteEnabled = false;
+        return;
+    }
+
+    if (subCommand === "chat") {
+        antiDeleteChat = action === "on";
         await sock.sendMessage(jid, {
-            text: "❌ *ANTI-DELETE DISABLED*\n\nDeleted messages will no longer be captured."
+            text: action === "on" 
+                ? "✅ *CHAT ANTI-DELETE ENABLED*\n\nI will now capture all deleted messages in chats."
+                : "❌ *CHAT ANTI-DELETE DISABLED*\n\nChat message deletion capture is now off."
         });
-        console.log("❌ Anti-delete disabled globally");
+    } else if (subCommand === "status") {
+        antiDeleteStatus = action === "on";
+        await sock.sendMessage(jid, {
+            text: action === "on" 
+                ? "✅ *STATUS ANTI-DELETE ENABLED*\n\nI will now capture all deleted status updates."
+                : "❌ *STATUS ANTI-DELETE DISABLED*\n\nStatus deletion capture is now off."
+        });
+    } else if (subCommand === "all") {
+        antiDeleteChat = action === "on";
+        antiDeleteStatus = action === "on";
+        await sock.sendMessage(jid, {
+            text: action === "on" 
+                ? "✅ *ALL ANTI-DELETE ENABLED*\n\nI will now capture all deleted messages and status updates."
+                : "❌ *ALL ANTI-DELETE DISABLED*\n\nAll deletion capture is now off."
+        });
     } else {
-        await sock.sendMessage(jid, { text: "❌ Use: .antidelete on/off" });
+        await sock.sendMessage(jid, { 
+            text: "❌ Use: .antidelete chat on/off OR .antidelete status on/off OR .antidelete all on/off" 
+        });
     }
 }
 
 export const monitor = (sock) => {
-    console.log("🔍 Anti-delete monitor loaded");
+    console.log("🔍 Anti-delete monitor loaded (Chat & Status)");
 
-    // Cache all incoming messages
+    // Cache all incoming messages and status updates
     sock.ev.on("messages.upsert", async ({ messages, type }) => {
         if (type !== "notify") return;
 
@@ -52,16 +75,63 @@ export const monitor = (sock) => {
 
                 const key = m.key;
                 const jid = key.remoteJid;
+                
+                // Check if this is a status update
+                const isStatus = jid === "status@broadcast";
+                
+                // Only cache if the corresponding anti-delete is enabled
+                if ((isStatus && !antiDeleteStatus) || (!isStatus && !antiDeleteChat)) {
+                    continue;
+                }
 
                 let mediaBuffer = null;
-                const messageType = Object.keys(m.message)[0];
+                let messageText = "";
+                let messageType = Object.keys(m.message)[0];
 
-                // ✅ use correct download function
+                // Extract text from different message types
+                if (m.message.conversation) {
+                    messageText = m.message.conversation;
+                } else if (m.message.extendedTextMessage?.text) {
+                    messageText = m.message.extendedTextMessage.text;
+                } else if (m.message.imageMessage?.caption) {
+                    messageText = m.message.imageMessage.caption;
+                } else if (m.message.videoMessage?.caption) {
+                    messageText = m.message.videoMessage.caption;
+                } else if (m.message.documentMessage?.caption) {
+                    messageText = m.message.documentMessage.caption;
+                }
+
+                // Force download media for status even if not viewed
                 if (["imageMessage", "videoMessage", "audioMessage", "stickerMessage", "documentMessage"].includes(messageType)) {
                     try {
-                        mediaBuffer = await downloadMediaMessage(m, "buffer", {}, { logger: console });
+                        // For status messages, we need to ensure media is downloaded properly
+                        if (isStatus) {
+                            // Force download by modifying the message structure if needed
+                            const messageCopy = JSON.parse(JSON.stringify(m));
+                            
+                            // Ensure status media is accessible
+                            if (messageCopy.message[messageType]) {
+                                messageCopy.message[messageType].url = messageCopy.message[messageType].url || "";
+                            }
+                            
+                            mediaBuffer = await downloadMediaMessage(messageCopy, "buffer", {}, { 
+                                logger: { level: 'silent' }
+                            });
+                        } else {
+                            mediaBuffer = await downloadMediaMessage(m, "buffer", {}, { 
+                                logger: { level: 'silent' }
+                            });
+                        }
                     } catch (e) {
-                        console.error("⚠️ Failed to download media:", e);
+                        console.error("⚠️ Failed to download media:", e.message);
+                        // Try alternative download method for status
+                        if (isStatus) {
+                            try {
+                                mediaBuffer = await downloadStatusMedia(sock, m, messageType);
+                            } catch (error2) {
+                                console.error("⚠️ Alternative download also failed:", error2.message);
+                            }
+                        }
                     }
                 }
 
@@ -72,10 +142,13 @@ export const monitor = (sock) => {
                     timestamp: new Date(),
                     pushName: m.pushName || "Unknown",
                     buffer: mediaBuffer,
-                    type: messageType
+                    type: messageType,
+                    text: messageText,
+                    isStatus: isStatus,
+                    key: key
                 });
 
-                console.log(`💾 Cached message ${key.id} (${messageType}) from ${jid}`);
+                console.log(`💾 Cached ${isStatus ? 'status' : 'message'} ${key.id} (${messageType}) from ${isStatus ? 'status' : jid} - Media: ${mediaBuffer ? '✅' : '❌'}`);
             } catch (error) {
                 console.error("Error caching message:", error);
             }
@@ -84,11 +157,10 @@ export const monitor = (sock) => {
 
     // Handle message deletions
     sock.ev.on("messages.update", async (updates) => {
-        if (!antiDeleteEnabled) return;
-
         for (const update of updates) {
             try {
                 if (!update.key) continue;
+                
                 const isDeletion =
                     update.update?.message === null ||
                     (update.update && Object.keys(update.update).length === 0) ||
@@ -97,7 +169,10 @@ export const monitor = (sock) => {
                 if (isDeletion) {
                     const cached = messageCache.get(update.key.id);
                     if (cached) {
-                        await handleDeletedMessage(sock, cached);
+                        // Check if the corresponding anti-delete is enabled
+                        if ((cached.isStatus && antiDeleteStatus) || (!cached.isStatus && antiDeleteChat)) {
+                            await handleDeletedMessage(sock, cached);
+                        }
                         messageCache.delete(update.key.id);
                     }
                 }
@@ -109,13 +184,16 @@ export const monitor = (sock) => {
 
     // Also handle messages.delete
     sock.ev.on("messages.delete", async (item) => {
-        if (!antiDeleteEnabled || !item.keys) return;
+        if (!item.keys) return;
 
         for (const key of item.keys) {
             try {
                 const cached = messageCache.get(key.id);
                 if (cached) {
-                    await handleDeletedMessage(sock, cached);
+                    // Check if the corresponding anti-delete is enabled
+                    if ((cached.isStatus && antiDeleteStatus) || (!cached.isStatus && antiDeleteChat)) {
+                        await handleDeletedMessage(sock, cached);
+                    }
                     messageCache.delete(key.id);
                 }
             } catch (error) {
@@ -125,36 +203,137 @@ export const monitor = (sock) => {
     });
 };
 
+// Alternative function to download status media
+async function downloadStatusMedia(sock, m, messageType) {
+    try {
+        const message = m.message[messageType];
+        if (!message) return null;
+
+        // Try to get direct media URL and download
+        const mediaUrl = message.url;
+        if (!mediaUrl) return null;
+
+        // Use axios or other HTTP client to download the media
+        const response = await sock.fetchRequest(mediaUrl, {
+            method: 'GET',
+            headers: {
+                'Origin': 'https://web.whatsapp.com',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+        });
+        
+        return Buffer.from(await response.arrayBuffer());
+    } catch (error) {
+        console.error("Alternative status media download failed:", error);
+        return null;
+    }
+}
+
 async function handleDeletedMessage(sock, cached) {
     try {
-        const { message, jid, sender, timestamp, pushName, buffer, type } = cached;
+        const { jid, sender, timestamp, pushName, buffer, type, text, isStatus, key } = cached;
 
         const senderName = pushName || sender.split("@")[0];
-        const chatType = jid.endsWith("@g.us") ? "Group" : "DM";
+        const chatType = isStatus ? "Status" : (jid.endsWith("@g.us") ? "Group" : "DM");
+        const messageType = type.replace('Message', '');
 
-        const alert = `
-🚨 *DELETED MESSAGE ALERT* 🚨
+        // Create comprehensive alert message
+        let alert = `
+🚨 *${isStatus ? 'DELETED STATUS' : 'DELETED MESSAGE'} ALERT* 🚨
 
 👤 *From:* ${senderName}
-💬 *Chat:* ${chatType}
+💬 *Chat Type:* ${chatType}
 ⏰ *Time:* ${timestamp.toLocaleString()}
-📝 *Type:* ${type}
-        `;
+📝 *Message Type:* ${messageType}
+        `.trim();
 
-        await sock.sendMessage(sock.user.id, { text: alert });
+        // Add content description
+        if (text) {
+            alert += `\n📄 *Content:* ${text}`;
+        } else {
+            alert += `\n📄 *Content:* [${messageType.toUpperCase()} MEDIA]`;
+        }
 
+        alert += `\n\n_Message was deleted by the sender_`;
+
+        // If we have media buffer, send it with alert as caption
         if (buffer) {
             let mediaType;
-            if (type === "imageMessage") mediaType = "image";
-            else if (type === "videoMessage") mediaType = "video";
-            else if (type === "audioMessage") mediaType = "audio";
-            else if (type === "stickerMessage") mediaType = "sticker";
-            else if (type === "documentMessage") mediaType = "document";
+            
+            if (type === "imageMessage") {
+                mediaType = "image";
+            } else if (type === "videoMessage") {
+                mediaType = "video";
+            } else if (type === "audioMessage") {
+                mediaType = "audio";
+            } else if (type === "stickerMessage") {
+                mediaType = "sticker";
+            } else if (type === "documentMessage") {
+                mediaType = "document";
+            }
 
-            await sock.sendMessage(sock.user.id, { [mediaType]: buffer });
-        } else if (message.conversation) {
-            await sock.sendMessage(sock.user.id, { text: `📝 Deleted text: ${message.conversation}` });
+            // For media types that support captions
+            if (mediaType === "image" || mediaType === "video" || mediaType === "document") {
+                try {
+                    await sock.sendMessage(sock.user.id, { 
+                        [mediaType]: buffer,
+                        caption: alert
+                    });
+                    console.log(`✅ Sent ${mediaType} with caption alert`);
+                } catch (error) {
+                    console.error(`Failed to send ${mediaType} with caption, sending separately:`, error);
+                    // Fallback: send alert first, then media
+                    await sock.sendMessage(sock.user.id, { text: alert });
+                    await sock.sendMessage(sock.user.id, { [mediaType]: buffer });
+                }
+            } else {
+                // For audio and stickers (no caption support)
+                await sock.sendMessage(sock.user.id, { text: alert });
+                await sock.sendMessage(sock.user.id, { [mediaType]: buffer });
+            }
+        } else {
+            // No media buffer - try to extract info from original message
+            let fallbackContent = "";
+            
+            if (cached.message?.imageMessage) {
+                fallbackContent = "📷 Image (media not downloaded)";
+            } else if (cached.message?.videoMessage) {
+                fallbackContent = "🎥 Video (media not downloaded)";
+            } else if (cached.message?.audioMessage) {
+                fallbackContent = "🎵 Voice Note (media not downloaded)";
+            } else if (cached.message?.stickerMessage) {
+                fallbackContent = "🖼️ Sticker (media not downloaded)";
+            } else if (cached.message?.documentMessage) {
+                fallbackContent = "📄 Document (media not downloaded)";
+            }
+            
+            if (fallbackContent) {
+                alert = alert.replace("📄 *Content:*", `📄 *Content:* ${fallbackContent}`);
+            }
+            
+            await sock.sendMessage(sock.user.id, { text: alert });
+            
+            // Try last-minute media download for status
+            if (isStatus && !buffer) {
+                try {
+                    const lastTryBuffer = await downloadMediaMessage({ key, message: cached.message }, "buffer", {}, { 
+                        logger: { level: 'silent' }
+                    });
+                    if (lastTryBuffer) {
+                        let mediaType = type.replace('Message', '').toLowerCase();
+                        await sock.sendMessage(sock.user.id, { 
+                            [mediaType]: lastTryBuffer,
+                            caption: `📎 Recovered ${mediaType} media`
+                        });
+                    }
+                } catch (e) {
+                    console.error("Last-minute media recovery failed:", e.message);
+                }
+            }
         }
+
+        console.log(`✅ Sent deletion alert for ${type} from ${senderName}`);
+
     } catch (error) {
         console.error("Error sending deletion alert:", error);
     }

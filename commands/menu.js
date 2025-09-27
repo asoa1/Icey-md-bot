@@ -90,6 +90,7 @@ ${ice} ᴠᴇʀꜱɪᴏɴ : *ICEY-MD*
 ┃${ice} .menu
 ┃${ice} .public
 ┃${ice} .ping
+┃${ice} .ai
 ┃${ice} .speed
 ┃└──────────
 
